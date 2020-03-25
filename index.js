@@ -2,17 +2,25 @@ const mysql = require("mysql");
 const inq = require("inquirer");
 const Tble = require("cli-table");
 
-var ch1;
-var ch2;
-var ch3;
-var funcPath = false;
+var ch1; // List of Roles
+var ch2; // List of Managers including None
+var ch3; // List of Employees
+var ch4; // List of Departments
 
 const validStr = async (val) =>{
-    if(val.length===0 ||  !/^[a-zA-Z]+$/.test(val)){
+    if(val.length===0 ||  !/^[a-zA-Z -]+$/.test(val)){
         return "Not Valid String"
     }
     return true;
 }
+
+/* const validNum = async (val) =>{
+    num = parseFloat(val);
+    if(num.length===0 || !isNaN(num)){
+        return "Not Valid Number";
+    }
+    return true;
+} */
 
 var tbleDeco = {
     'top': '═',
@@ -50,6 +58,12 @@ var t3 = new Tble({
     colWidths:[4, 25]
 });
 
+var t4 = new Tble({
+    chars:tbleDeco,
+    head:["Dept Name", "Total Salaries" ],
+    colWidths:[25, 25]
+});
+
 var conn = mysql.createConnection({
     host: "localhost",
     port: 3306,
@@ -62,7 +76,7 @@ conn.connect(err =>{
     if(err) throw err;
     console.log("Connection Established to data")
     //Initialize Roles List and Manager's list
-    getRoles();
+    initChoice();
 });
 
 const startQ =   {
@@ -144,9 +158,13 @@ function addEmp(){
             type: "input",
             validate: validStr,
             filter: function(val){
-                val = val.toLowerCase();
-                val = val.slice(0,1).toUpperCase()+val.slice(1,val.length);
-                return val}
+                val = val.toLowerCase()
+                .split(" ")
+                .map(word => {
+                    return(word.charAt(0).toUpperCase() + word.slice(1));
+                });
+                return val.join(" ");
+            }
         },
         {
             name: "lastName",
@@ -154,7 +172,7 @@ function addEmp(){
             type: "input",
             filter: function(val){
                 val = val.toLowerCase();
-                val = val.slice(0,0).toUpperCase()+val.slice(1,val.length);
+                val = val.slice(0,1).toUpperCase()+val.slice(1,val.length);
                 return val}
         },
         {
@@ -171,7 +189,6 @@ function addEmp(){
         }
     ];
     inq.prompt(empQ).then(ans =>{
-        console.log(ans);
         roleID1 = ans.roleID.split(" ")[0];
         mgrID1 = ans.mgrID.split(" ")[0];
         if(mgrID1 == "None") mgrID1= null;
@@ -181,16 +198,16 @@ function addEmp(){
             ans.lastName, 
             roleID1,
             mgrID1
-        ]
+        ], (err, resp) =>{if (err) throw err;}
         );
         console.log("Added Employee");
-        start();
+        initChoice();
     }).catch(err=>{console.log(err)});
 
 };
 
 const viewEmp= () =>{
-    console.log("Viewed Employee")
+    console.log("View Employees")
     conn.query(
         `select l.last_name as last, l.first_name as first, r1.title as title, r2.name as department 
         from employee l
@@ -200,27 +217,80 @@ const viewEmp= () =>{
             l.role_id = r1.id
         left join 
             department r2 
-        on r2.id = r1.department_id 
+        on r2.id = r1.department_id
+        where last_name is not null 
          order by 
             last_name, first_name `, (err, res)=>{
         if(err) throw err;
-        t1.splice(0,t1.length);
+        if(res == null){
+            console.log("NO EMPLOYEES -- YIKES!");
+            start();
+        }
+        else{
+        t1.splice(0,t1.length); //empty table
         res.forEach(ele =>{
-            t1.push([ele.first, ele.last, ele.title, ele.department])
-        })
+            t1.push([ele.first, ele.last, ele.title, ele.department]);
+        });
         console.log(t1.toString());
         start();
-    })
+    }
+    });
 };
 
 const delEmp = () =>{
-    console.log("Deleted Employee");
-    start();
+    console.log("Delete Employee");
+    deQs = 
+        {
+            name: "empList",
+            type: "list",
+            message: "Select the employee you want to delete",
+            choices: ch3
+        };
+    inq
+    .prompt(deQs)
+    .then(res=>{
+        const empID = parseInt(res.empList.split(" ")[0]);
+        if(isNaN(empID)) {start()}
+        else{
+        conn.query(`delete from employee where id=${empID}`, (err, resp) =>{if (err) throw err;})
+        initChoice();
+        }
+    });
 }
 
 const addRole = () =>{
     console.log("Add Role");
-    start();
+    arQs = [{
+        name: 'newTitle',
+        message: "Add a New Role Title",
+        type: "input",
+        validate: validStr
+    },
+    {
+        name: "newSalary",
+        message: "Add the salary (one or more digits, a decimal and cents",
+        type:  "number"
+    },
+    {
+        name: "dept",
+        message: "Select the Department",
+        type: "list",
+        choices: ch4
+    }
+]
+    inq
+    .prompt(arQs)
+    .then(ans=>{
+        let sal = !isNaN(parseFloat(ans.newSalary)) ? parseFloat(ans.newSalary) : 0;
+        let deptID = ans.dept.slice(" ")[0].trim();
+        conn.query('insert into job_role (title, salary, department_id) values (?, ?, ?)',
+        [
+            ans.newTitle,
+            sal, 
+            deptID
+        ], (err, resp) =>{if (err) throw err;})
+        initChoice()
+    });
 };
 
 const viewRoles = () =>{
@@ -240,20 +310,54 @@ const viewRoles = () =>{
 
 const delRole = () =>{
     console.log("Delete Role");
-    start();
+    inq
+    .prompt({
+        name:"whchRole",
+        message: "Which Role Do you want to delete",
+        type: "list",
+        choices: ch1
+    })
+    .then(ans=>{
+        let dRole = parseInt(ans.whchRole.split(" ")[0]);
+        conn.query(`select id from employee where role_id = ${dRole}`,(err,resp)=>{
+            if(err) throw err;
+            if(resp.id != null){
+                console.log("Can't Delete, role exists in emp records")
+            } else {
+                conn.query(`delete from job_role where id = ${dRole}`)
+
+            }
+            initChoice(); 
+        });
+
+    });
 }
 
 const addDept = () =>{
     console.log("Add Department");
-    start();
-
+    const dQs = {
+        name : "newDpt",
+        type : "input",
+        message: "Enter a New Department",
+        validate: validStr
+    }
+    inq
+    .prompt(dQs)
+    .then(ans => {
+        conn.query("insert into department (name) values (?);", 
+        [ans.newDpt],
+        (err, resp)=>{
+            if(err) throw err;
+            initChoice();
+        });
+    });
 }
 const viewDepts = () =>{
     console.log("View Departments");
     conn.query(
-        `select id, name from departments`, (err, res)=>{
+        `select id, name from department`, (err, res)=>{
         if(err) throw err;
-        t3.splice(0, t3.length);
+        t3.splice(0, t3.length); //clear table
         res.forEach(ele =>{
             t3.push([ele.id, ele.name]);
         });
@@ -269,8 +373,28 @@ const delDept  = () =>{
 
 const updteEmpRoles  = () =>{
     console.log("Update Employee Roles");
-    start();
-}
+    uerQs = [
+        {
+            name: "empList",
+            type: "list",
+            message: "Select the employee you want to change",
+            choices: ch3
+        },
+        {
+            name: "newRole",
+            type: "list",
+            message: "Select the new role",
+            choices: ch1
+        }
+    ]
+    inq
+    .prompt(uerQs).then(ans=>{
+        const empID = ans.empList.split(" ")[0];
+        const roleID = ans.newRole.split(" ")[0]
+        conn.query(`update employee set role_id =${roleID} where id =${empID}`, (err, resp)=> {if (err) throw err});
+        initChoice();
+    });
+};
 
 const viewEmpsByMgr  = () =>{
     console.log("View Employees by Manager");
@@ -279,12 +403,30 @@ const viewEmpsByMgr  = () =>{
 
 const viewSalByDept  = () =>{
     console.log("View Salaries");
-    start();
+    conn.query(`select c.name as name, sum(r.salary) as tot_sal
+    from employee l
+    left join job_role r
+    on l.role_id = r.id
+    left join department c
+    on r.department_id = c.id
+    where c.name is not null 
+    group by r.department_id
+    having tot_sal is not null;`, 
+    (err, res)=>{
+        if(err) throw err;
+        t4.splice(0,t4.length); //empty table
+        res.forEach(ele =>{
+            t4.push([ele.name, ele.tot_sal])
+        });
+        console.log(t4.toString());
+        start();
+    });
+
 };
 
 // Need so you can only add a valid role to an employee
-function getRoles(){
-    console.log("Getting Roles");
+function initChoice(){
+    //console.log("Getting Roles");
     conn.query(`select
                      l.id, l.title, r.name 
                 from 
@@ -295,50 +437,47 @@ function getRoles(){
                     l.department_id = r.id`, (err, resp)=>{
         if(err) throw err;
         ch1 = resp.map(ele => [ele.id,  ele.title, ele.name].join(" "));
-        console.log(ch1);
-        if(!funcPath) getMgrs()
-        else start();
         });
-};
 
-function getMgrs(){
-    console.log("Getting Managers");
-    conn.query(`select
-                     l.id, l.first_name, l.last_name, r.title, m.name as dept
-                from
-                    employee l
-                left join
-                    job_role r
-                on
-                    l.role_id = r.id
-                left join
-                    department m
-                on
-                    r.department_id = m.id 
-                where
-                    r.title in ("VP", "Director", "Manager")
-    `, (err, resp)=>{
-        if(err) throw err;
-        ch2 = resp.map(ele => [ele.id, ele.first_name, ele.last_name, ele.title, ele.dept].join(" "));
-        ch2.push("None")
-        console.log(ch2);
-        start();
-    })
-}
+        //console.log("Getting Managers");
+        conn.query(`select
+                         l.id, l.first_name, l.last_name, r.title, m.name as dept
+                    from
+                        employee l
+                    left join
+                        job_role r
+                    on
+                        l.role_id = r.id
+                    left join
+                        department m
+                    on
+                        r.department_id = m.id 
+                    where
+                        r.title in ("VP", "Director", "Manager")
+        `, (err, resp)=>{
+            if(err) throw err;
+            ch2 = resp.map(ele => [ele.id, ele.first_name, ele.last_name, ele.title, ele.dept].join(" "));
+            ch2.push("None")
+         });
 
-function getEmps(){
-    console.log("Getting Employees");
-    conn.query(`select
-                     l.id, l.first_name, l.last_name, r.title 
-                from 
-                    job_role l
-                left join
-                    job_role r
-                on
-                    l.role_id = r.id`, (err, resp)=>{
-        if(err) throw err;
-        ch3 = resp.map(ele => [ele.id,  ele.title, ele.name].join(" "));
-        console.log(ch1);
-        getRoles();
+        //console.log("Getting Employees");
+        conn.query(`select
+                         l.id, l.first_name, l.last_name, r.title, r.id as job_id 
+                    from 
+                        employee l
+                    left join
+                        job_role r
+                    on l.role_id = r.id`
+                    , (err, resp)=>{
+             if(err) throw err;
+             ch3 = resp.map(ele => [ele.id,  ele.first_name, ele.last_name, ele.title, ele.job_id].join(" "));
+             ch3.push("None");
+            });
+        //console.log("Getting Departments");
+        conn.query(`select id, name from department`
+        , (err, resp)=>{
+            if(err) throw err;
+            ch4 = resp.map(ele => [ele.id, ele.name].join(" "));
+            start();
         });
 };
