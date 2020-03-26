@@ -3,7 +3,7 @@
 <img src = "https://img.shields.io/badge/license-MIT-green.svg" alt ="badge" width ="60"/>        
 
 ## Video of Running Application
-![gif of Employee Tracker](C:\Users\RobMoelTravel\Documents\Bootcamp\Homework\rvm-employee-tracker\EmployeeTracker.gif)
+![](EmployeeTracker.gif)
 
 ## Description
 This program executes a CLI program to maintain and employee CMS
