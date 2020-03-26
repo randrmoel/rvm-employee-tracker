@@ -6,7 +6,11 @@
 ![](EmployeeTracker.gif)
 
 ## Description
-This program executes a CLI program to maintain and employee CMS
+This program executes a CLI program to maintain and employee CMS.  It allows the user to view, add, delete, or change employee information, view, add, delete department information, view, add, delete role information, see employes grouped by manager, and finally, see the budget of all department salaries.
+
+The program uses inquirer to create choice menus dynamically from the actual data.
+
+The application is invoked at the command line by typing node index.
         
 # Table of contents
 1. [Installation](#installation)
