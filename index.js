@@ -44,8 +44,8 @@ var t1 = new Tble({
 // Table template for Role List
 var t2 = new Tble({
     chars: tbleDeco,
-    head: ["ID", "Title", "Salary", "Department ID"],
-    colWidths: [4, 20, 10, 20]
+    head: ["ID", "Title", "Salary", "Department"],
+    colWidths: [4, 20, 10, 25]
 }); 
 
 // Table template for Department List
@@ -315,11 +315,19 @@ const addRole = () =>{
 const viewRoles = () =>{
     console.log("View Roles");
     conn.query(
-        `select id, title, salary, department_id from job_role`, (err, res)=>{
+        `select
+             l.id, l.title, l.salary, r.name as dept_name 
+        from 
+            job_role l
+        left join 
+            department r
+        on 
+            l.department_id = r.id
+            `, (err, res)=>{
         if(err) throw err;
         t2.splice(0, t2.length);
         res.forEach(ele =>{
-            t2.push([ele.id, ele.title, ele.salary, ele.department_id]);
+            t2.push([ele.id, ele.title, ele.salary, ele.dept_name]);
         });
         console.log(t2.toString());
         start();
